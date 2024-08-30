@@ -1,0 +1,88 @@
+1. create and activate venv
+    python -m venv venv
+    venv\Scripts\activate
+
+2. pip install fastapi uvicorn  pymongo==3.11 'pymongo[srv]'
+
+3. create main.py in root dir
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    3.1 add info from mongodb Atlas
+    3.2 edit name and password
+
+4. start server (connect to MongoDB)
+    uvicorn main:app --reload
+    out: "Pinged your deployment. You successfully connected to MongoDB!"
+
+5. create DIR config with FILE database.py
+
+    from pymongo import MongoClient
+    client = MongoClient("mongodb+srv://admin:test1234!@cluster0.7o5py.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+    db = client.todo_db
+    collection_name = db["todo_collection"]
+
+6. create DIR models with FILE todos.py
+
+    from pydantic import BaseModel
+    class Todo(BaseModel):
+        name: str
+        description: str
+        complete: bool
+
+7. create DIR schema with schemas.py (for deserialization of .json data from DB)
+    7.1 add individual serializer for a todo
+        def individual_serial(todo) -> dict:
+            return{
+                "id":str(todo["_id"]),
+                "name": todo["name"],
+                "description": todo["description"],
+                "complete": todo["complete"]
+            }
+    
+    7.2 add list serializer for all of todos (calls individual ser. for amount-of-todos times)
+        def list_serial(todos) -> list:
+            return [individual_serial(todo) for todo in todos]
+
+8. create DIR router with FILE route.py
+    8.1 import nesessary pieces from corresponding files
+        from fastapi import APIRouter
+        from models.todos import Todo
+        from config.database import collection_name
+        from schema.schemas import list_serial
+        from bson import ObjectId
+    
+    8.2 crete router
+        router = APIRouter()
+    
+    8.3 add GET request method to get all of todos visiting the "/" page
+        @router.get("/")
+        async def get_todos():
+            todos = list_serial(collection_name.find()) (finds all objects of collection_name and returns them)
+            return todos
+
+9. add route to main.py
+    9.1 from routes.route import router
+        app.include_router(router)
+
+    9.2 remove pasted in info from MongoDB website
+
+10. add POST, PUT and DELETE methods with logic of creating Objects and Updating them
+
+    # POST request method
+    @router.post("/")
+    async def post_todo(todo:Todo):
+        collection_name.insert_one(dict(todo))
+
+    # PUT request method
+    @router.put("/{id}")
+    async def put_todo(id: str, todo: Todo):
+        collection_name.find_one_and_update({"_id": ObjectId(id)}, {"$set": dict(todo)})
+
+    # DELETE request method
+    @router.delete("/{id}")
+    async def delete_todo(id:str):
+        collection_name.find_one_and_delete({"_id": ObjectId(id)})
+
+11. Use of request methods at "http://127.0.0.1:8000/docs"
